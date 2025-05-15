@@ -68,7 +68,7 @@ func NewScheduler(datastore Datastore) *Scheduler {
 		preSchedulePlugins:  []plugins.PreSchedule{},
 		filters:             []plugins.Filter{filter.NewSheddableCapacityFilter(), lowLatencyFilter},
 		scorers:             map[plugins.Scorer]int{},
-		picker:              &picker.RandomPicker{},
+		picker:              &picker.RoundRobinPicker{},
 		postSchedulePlugins: []plugins.PostSchedule{},
 	}
 
@@ -151,14 +151,16 @@ func (s *Scheduler) runFilterPlugins(ctx *types.SchedulingContext) []types.Pod {
 	for _, filter := range s.filters {
 		loggerDebug.Info("Running filter plugin", "plugin", filter.Name())
 		before := time.Now()
-		filteredPods = filter.Filter(ctx, filteredPods)
+		// For prod stack, we don't need to filter pods, we will use
+		// customized routing logic to route requests to the correct pod
+		// filteredPods = filter.Filter(ctx, filteredPods)
 		metrics.RecordSchedulerPluginProcessingLatency(plugins.FilterPluginType, filter.Name(), time.Since(before))
 		loggerDebug.Info("Filter plugin result", "plugin", filter.Name(), "pods", filteredPods)
 		if len(filteredPods) == 0 {
 			break
 		}
 	}
-	loggerDebug.Info("After running filter plugins")
+	loggerDebug.Info("After running filter plugins", "pods", len(filteredPods))
 
 	return filteredPods
 }
@@ -183,7 +185,7 @@ func (s *Scheduler) runScorerPlugins(ctx *types.SchedulingContext, pods []types.
 		loggerDebug.Info("After running scorer", "scorer", scorer.Name())
 	}
 	loggerDebug.Info("After running scorer plugins")
-
+	loggerDebug.Info("Weighted score per pod", "weightedScorePerPod", weightedScorePerPod)
 	return weightedScorePerPod
 }
 
